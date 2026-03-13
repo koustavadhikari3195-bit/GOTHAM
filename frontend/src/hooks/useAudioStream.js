@@ -1,0 +1,75 @@
+import { useRef } from "react"
+
+export default function useAudioStream() {
+  const streamRef      = useRef(null)
+  const timerRef       = useRef(null)
+  const isRecordingRef = useRef(false)
+
+  const start = async (onChunk) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount:      1,
+          sampleRate:        16000,
+          echoCancellation:  true,
+          noiseSuppression:  true,
+          autoGainControl:   true,
+        }
+      })
+      streamRef.current      = stream
+      isRecordingRef.current = true
+
+      const startRecorder = () => {
+        if (!isRecordingRef.current || !streamRef.current) return
+
+        const recorder = new MediaRecorder(streamRef.current, {
+          mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+            ? "audio/webm;codecs=opus"
+            : "audio/webm"
+        })
+
+        let chunks = []
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunks.push(e.data)
+        }
+
+        recorder.onstop = async () => {
+          if (chunks.length > 0) {
+            const blob = new Blob(chunks, { type: "audio/webm" })
+            // Convert Blob to ArrayBuffer for reliable binary transfer
+            const buffer = await blob.arrayBuffer()
+            onChunk(buffer)
+          }
+          if (isRecordingRef.current) {
+            startRecorder()
+          }
+        }
+
+        recorder.start()
+
+        // Stop every 3 seconds to emit a fully valid WebM file
+        timerRef.current = setTimeout(() => {
+          if (recorder.state === "recording") {
+            recorder.stop()
+          }
+        }, 3000)
+      }
+
+      startRecorder()
+    } catch (err) {
+      console.error("Microphone access error:", err)
+      throw err
+    }
+  }
+
+  const stop = () => {
+    isRecordingRef.current = false
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+  }
+
+  return { start, stop }
+}

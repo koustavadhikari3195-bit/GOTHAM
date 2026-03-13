@@ -1,0 +1,36 @@
+# Environment & Secrets
+.env
+secrets/
+keys.txt
+*.key
+*.pem
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# ML Models (too large for git)
+*.onnx
+voices.bin
+
+# Node / Frontend
+node_modules/
+dist/
+.vite/
+
+# Test artifacts
+test_artifacts/
+test_voice_output.wav
+ffmpeg_temp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp

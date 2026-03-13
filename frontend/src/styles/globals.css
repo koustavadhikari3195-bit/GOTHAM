@@ -1,0 +1,227 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:         #080808;
+  --surface:    #111111;
+  --surface-2:  #0c0c0c;
+  --border:     #1e1e1e;
+  --border-2:   #2a2a2a;
+  --red:        #e63946;
+  --red-dark:   #c1121f;
+  --red-dim:    #7a1d23;
+  --green:      #2dc653;
+  --blue:       #4361ee;
+  --text:       #f0f0f0;
+  --text-muted: #888;
+  --muted:      #555;
+  --font-head:  'Barlow Condensed', sans-serif;
+  --font-body:  'Barlow', sans-serif;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+
+/* ─── PAGE LAYOUT ─────────────────────────────────────── */
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--bg);
+  background-image: radial-gradient(ellipse at 50% 0%, #1a0a0a 0%, transparent 60%);
+}
+
+.card {
+  width: 100%;
+  max-width: 620px;
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  padding: 36px;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  animation: cardFadeIn 0.5s ease-out;
+}
+
+@keyframes cardFadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── HEADER ──────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.logo-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.logo-icon {
+  font-size: 36px;
+  filter: drop-shadow(0 2px 8px rgba(230, 57, 70, 0.25));
+}
+
+.title {
+  font-family: var(--font-head);
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: var(--text);
+  line-height: 1;
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  margin-top: 3px;
+  font-family: var(--font-head);
+  text-transform: uppercase;
+}
+
+/* ─── DIVIDER ─────────────────────────────────────────── */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+  margin-bottom: 24px;
+}
+
+/* ─── CTA TEXT ────────────────────────────────────────── */
+.cta {
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.7;
+  margin-bottom: 24px;
+}
+.cta strong {
+  color: var(--red);
+  font-weight: 600;
+}
+
+/* ─── ERROR BOX ───────────────────────────────────────── */
+.error-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #1f0d0e;
+  border: 1px solid rgba(230, 57, 70, 0.2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--red);
+  font-size: 13px;
+  margin-bottom: 16px;
+  animation: errorSlideIn 0.3s ease-out;
+}
+.error-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+@keyframes errorSlideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── TEXT INPUT ROW ──────────────────────────────────── */
+.text-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.text-input {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--font-body);
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.text-input:focus {
+  border-color: var(--border-2);
+}
+.text-input::placeholder {
+  color: #444;
+}
+
+.send-btn {
+  background: var(--border);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  color: #aaa;
+  padding: 0 18px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  transition: all 0.2s ease;
+}
+.send-btn:hover {
+  background: var(--border-2);
+  color: var(--text);
+}
+
+/* ─── FOOTER ──────────────────────────────────────────── */
+.footer-text {
+  margin-top: 20px;
+  font-size: 11px;
+  color: #2a2a2a;
+  text-align: center;
+  letter-spacing: 1px;
+  font-family: var(--font-head);
+  text-transform: uppercase;
+}
+
+/* ─── ANIMATIONS ──────────────────────────────────────── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(45, 198, 83, 0.3); }
+  50%      { box-shadow: 0 0 0 8px rgba(45, 198, 83, 0); }
+}
+
+/* ─── RESPONSIVE ──────────────────────────────────────── */
+@media (max-width: 480px) {
+  .card {
+    padding: 24px 18px;
+    border-radius: 12px;
+  }
+  .title {
+    font-size: 22px;
+    letter-spacing: 2px;
+  }
+  .logo-icon {
+    font-size: 28px;
+  }
+}
