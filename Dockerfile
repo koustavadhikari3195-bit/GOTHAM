@@ -29,6 +29,12 @@ COPY secrets* ./secrets/
 COPY kokoro-v0_19.onnx* ./
 COPY voices.bin* ./
 
+# Download model files if they are missing (essential for GitHub deployments without LFS)
+RUN python scripts/download_models.py
+
+# Pre-download Whisper model to speed up first request
+RUN python -c "import whisper; whisper.load_model('base.en')"
+
 # Ensure a dummy frontend folder exists so main.py doesn't error out looking for paths
 RUN mkdir -p frontend/dist
 
