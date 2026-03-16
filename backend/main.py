@@ -58,6 +58,16 @@ logger.propagate = False
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     config.validate()
+    # Warm up AI models so the first request is fast
+    try:
+        from backend.voice.stt import _load as load_stt
+        from backend.voice.tts import _load as load_tts
+        logger.info("Warming up AI models...")
+        load_stt()
+        load_tts()
+        logger.info("AI models warmed up and ready")
+    except Exception as e:
+        logger.error(f"Error during model warm-up: {e}")
     logger.info("=== Gotham Fitness AI Agent -- Web + Phone ready ===")
     logger.info(f"    Environment : {config.ENVIRONMENT}")
     logger.info(f"    CORS origins: {config.get_allowed_origins()}")
@@ -157,20 +167,15 @@ async def web_session(ws: WebSocket):
         agent = AgentRouter()
         logger.info("AgentRouter ready")
 
-        # Opening greeting
-        try:
-            logger.info("Generating opening greeting...")
-            greeting = agent.chat(
-                "A new visitor just connected via the website. "
-                "Greet them warmly in the Gotham Fitness brand voice."
-            )
-            logger.info(f"Greeting generated: {greeting[:50]}...")
-        except Exception as e:
-            logger.warning(f"Could not generate dynamic greeting: {e}")
-            greeting = (
-                "Welcome to Gotham Fitness! 🏋️ Your first rep starts here. "
-                "I'm your AI concierge. What brings you to our gym today?"
-            )
+        # Fast Opening Greeting (Hardcoded to avoid latency/429s)
+        import random
+        greetings = [
+            "Welcome to Gotham Fitness! I'm your AI concierge. What brings you in today?",
+            "Hey there! Welcome to Gotham. I'm here to help you get started. What are your fitness goals?",
+            "Welcome to Gotham Fitness! Ready to crush some goals? I'm your AI concierge—how can I help you today?"
+        ]
+        greeting = random.choice(greetings)
+        logger.info(f"Using fast greeting: {greeting}")
         await send_response(greeting)
 
         while True:
