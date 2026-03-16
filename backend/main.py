@@ -193,70 +193,65 @@ async def web_session(ws: WebSocket):
         await send_response(greeting)
 
         while True:
-            data = await ws.receive()
+            # Standard Starlette/FastAPI way to handle messages and disconnects
+            message = await ws.receive()
+            
+            if message["type"] == "websocket.disconnect":
+                logger.info("Client disconnected normally")
+                break
+                
             user_text = None
+            
+            # Since my App.jsx fix, everything comes as JSON text
+            inner_text = message.get("text")
+            if not inner_text:
+                continue
 
-            # Voice audio bytes from browser mic
-            if data.get("bytes"):
-                raw = data["bytes"]
-                logger.info(f"Received audio chunk: {len(raw)} bytes")
-                if len(raw) > MAX_MESSAGE_SIZE:
-                    logger.warning(f"Audio chunk too large ({len(raw)} bytes), skipping")
-                    continue
-                try:
-                    user_text = transcribe(raw)
+            try:
+                msg = json.loads(inner_text)
+                mtype = msg.get("type")
+                
+                if mtype == "end_session":
+                    logger.info("Client requested session end")
+                    break
+                    
+                elif mtype == "audio":
+                    raw_b64 = msg.get("bytes", "")
+                    if raw_b64:
+                        raw = base64.b64decode(raw_b64)
+                        logger.info(f"Received audio: {len(raw)} bytes")
+                        try:
+                            stt_text = transcribe(raw)
+                            # Handle common hallucinations or tiny blips
+                            if stt_text and stt_text.lower().strip() not in ["you", "thank you.", "subtitles by"]:
+                                user_text = stt_text
+                                logger.info(f"STT result: '{user_text}'")
+                                await ws.send_json({"type": "stt", "text": user_text})
+                        except Exception as e:
+                            logger.error(f"STT Error: {e}")
+                            
+                elif mtype == "text_input":
+                    content = msg.get("content", "")
+                    if content == "[PING]":
+                        logger.info("Received reliability PING")
+                        if not log: await send_response(greeting)
+                        continue
+                    user_text = content.strip()
                     if user_text:
-                        logger.info(f"STT result: '{user_text}'")
-                        await ws.send_json({"type": "stt", "text": user_text})
-                    else:
-                        # Only log empty if it's not just a tiny blip
-                        if len(raw) > 1000:
-                            logger.debug("STT returned empty text for chunk")
-                except Exception as e:
-                    logger.error(f"Transcription error: {e}", exc_info=True)
-                    continue
+                        logger.info(f"Text Input: {user_text}")
 
-            # Text message (fallback / control signals)
-            elif data.get("text"):
-                try:
-                    msg = json.loads(data["text"])
-                    if msg.get("type") == "end_session":
-                        logger.info("Client requested session end")
-                        break
-                    elif msg.get("type") == "audio":
-                        raw_b64 = msg.get("bytes", "")
-                        if raw_b64:
-                            import base64
-                            raw = base64.b64decode(raw_b64)
-                            logger.info(f"Received Base64 audio chunk: {len(raw)} bytes")
-                            # Run transcription
-                            try:
-                                user_text = transcribe(raw)
-                                if user_text:
-                                    logger.info(f"STT result: '{user_text}'")
-                                    await ws.send_json({"type": "stt", "text": user_text})
-                            except Exception as e:
-                                logger.error(f"Base64 STT error: {e}")
-                        # Don't continue - fall through to process user_text
-                    elif msg.get("type") == "text_input":
-                        content = msg.get("content", "")
-                        if content == "[PING]":
-                            logger.info("Received reliability PING from frontend")
-                            if not log:
-                                await send_response(greeting)
-                            continue
+            except json.JSONDecodeError:
+                logger.error("Failed to decode JSON from client")
+                continue
+            except Exception as e:
+                # If we hit a 'Cannot call send' error here, the socket is dead
+                if "close message" in str(e).lower():
+                    logger.warning("Socket closed unexpectedly during processing")
+                    break
+                logger.error(f"Error in message loop: {e}", exc_info=True)
+                continue
 
-                        if len(content) > 2000:
-                            logger.warning("Text input too long, truncating")
-                            content = content[:2000]
-                        user_text = content.strip()
-                        if user_text:
-                            logger.info(f"Text input: {user_text}")
-                except json.JSONDecodeError as e:
-                    logger.error(f"JSON decode error: {e}")
-                    continue
-
-            # Process user input if we have it
+            # 4. Process user input if we have it
             if user_text:
                 log.append({"role": "user", "text": user_text})
                 try:
@@ -266,8 +261,7 @@ async def web_session(ws: WebSocket):
                     logger.error(f"Agent chat error: {e}", exc_info=True)
                     try:
                         await ws.send_json({"type": "error", "message": "Agent error"})
-                    except Exception:
-                        pass
+                    except: pass
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")
