@@ -10,7 +10,8 @@ class Config:
 
     # --- Database ---
     SUPABASE_URL         = os.getenv("SUPABASE_URL")
-    SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+    # Robust loading: check multiple common names for the service key
+    SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("SERVICE_ROLE_KEY")
 
     # --- Google Calendar ---
     GOOGLE_CALENDAR_ID   = os.getenv("GOOGLE_CALENDAR_ID")
