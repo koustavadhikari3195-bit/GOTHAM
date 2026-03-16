@@ -67,8 +67,13 @@ async def lifespan(app: FastAPI):
             from backend.voice.stt import _load as load_stt
             from backend.voice.tts import _load as load_tts
             logger.info("Warming up AI models in background...")
-            # We run these in a thread because they are blocking CPU tasks
+            
+            # Load Whisper first (smaller footprint than Kokoro initially)
             await asyncio.to_thread(load_stt)
+            logger.info("STT ready. Waiting 10s to stagger memory load...")
+            await asyncio.sleep(10)
+            
+            # Load Kokoro after a breather
             await asyncio.to_thread(load_tts)
             logger.info("AI models warmed up and ready")
         except Exception as e:
