@@ -80,7 +80,7 @@ app.add_middleware(
 # This must be defined last so it doesn't intercept /health, /ws/*, etc.
 def setup_frontend(app: FastAPI):
     _dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-    if _dist.is_dir():
+    if _dist.is_dir() and (_dist / "assets").is_dir():
         app.mount("/assets", StaticFiles(directory=str(_dist / "assets")), name="assets")
 
         @app.get("/{path:path}")
