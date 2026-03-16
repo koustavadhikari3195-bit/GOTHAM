@@ -14,9 +14,18 @@ GYM_TZ = ZoneInfo(os.getenv("GYM_TIMEZONE", "America/New_York"))
 
 
 def _service():
-    creds = service_account.Credentials.from_service_account_file(
-        os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"), scopes=SCOPES
-    )
+    json_spec = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if not json_spec:
+        raise ValueError("GOOGLE_SERVICE_ACCOUNT_JSON environment variable is not set.")
+
+    # Check if it's a JSON string or a path
+    if json_spec.strip().startswith("{"):
+        import json
+        info  = json.loads(json_spec)
+        creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+    else:
+        creds = service_account.Credentials.from_service_account_file(json_spec, scopes=SCOPES)
+        
     return build("calendar", "v3", credentials=creds)
 
 

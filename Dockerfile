@@ -28,7 +28,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend + scripts
 COPY backend/ ./backend/
 COPY scripts/ ./scripts/
-COPY secrets/ ./secrets/
+# Copy secrets only if they exist (ignored by git, but might be provided in custom builds)
+COPY secrets* ./secrets/
 
 # Copy built frontend
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist

@@ -8,9 +8,17 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 def run(event_id: str, lead_name: str,
         lead_email: str = None, lead_phone: str = None) -> dict:
     try:
-        creds = service_account.Credentials.from_service_account_file(
-            os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"), scopes=SCOPES
-        )
+        json_spec = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+        if not json_spec:
+            return {"success": False, "error": "GOOGLE_SERVICE_ACCOUNT_JSON not set"}
+
+        if json_spec.strip().startswith("{"):
+            import json
+            info  = json.loads(json_spec)
+            creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+        else:
+            creds = service_account.Credentials.from_service_account_file(json_spec, scopes=SCOPES)
+
         svc    = build("calendar", "v3", credentials=creds)
         cal_id = os.getenv("GOOGLE_CALENDAR_ID")
 
