@@ -39,15 +39,21 @@ class Config:
         """Build the full list of allowed CORS origins."""
         origins = []
         if cls.FRONTEND_URL:
-            origins.append(cls.FRONTEND_URL)
+            # Trim trailing slashes for exact matching
+            origins.append(cls.FRONTEND_URL.rstrip("/"))
+        
         if cls.ALLOWED_ORIGINS:
-            origins.extend([o.strip() for o in cls.ALLOWED_ORIGINS.split(",") if o.strip()])
-        if cls.ENVIRONMENT == "development":
+            origins.extend([o.strip().rstrip("/") for o in cls.ALLOWED_ORIGINS.split(",") if o.strip()])
+        
+        # Add common local origins if in development
+        if cls.ENVIRONMENT.lower() != "production":
             origins.extend([
                 "http://localhost:5173",
                 "http://localhost:5174",
                 "http://127.0.0.1:5173",
             ])
+        
+        # Ensure we return a unique list
         return list(set(origins))
 
     @classmethod
