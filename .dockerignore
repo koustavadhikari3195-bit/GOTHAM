@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+node_modules/
+frontend/node_modules/
+.git/
+.env
+.env.local
+test_artifacts/
+*.wav
+*.mp3
+ffmpeg_temp/
