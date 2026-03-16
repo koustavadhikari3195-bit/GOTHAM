@@ -58,16 +58,25 @@ logger.propagate = False
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     config.validate()
-    # Warm up AI models so the first request is fast
-    try:
-        from backend.voice.stt import _load as load_stt
-        from backend.voice.tts import _load as load_tts
-        logger.info("Warming up AI models...")
-        load_stt()
-        load_tts()
-        logger.info("AI models warmed up and ready")
-    except Exception as e:
-        logger.error(f"Error during model warm-up: {e}")
+    
+    async def warm_up():
+        # Small delay to let the server start and pass healthcheck
+        import asyncio
+        await asyncio.sleep(2)
+        try:
+            from backend.voice.stt import _load as load_stt
+            from backend.voice.tts import _load as load_tts
+            logger.info("Warming up AI models in background...")
+            # We run these in a thread because they are blocking CPU tasks
+            await asyncio.to_thread(load_stt)
+            await asyncio.to_thread(load_tts)
+            logger.info("AI models warmed up and ready")
+        except Exception as e:
+            logger.error(f"Error during background model warm-up: {e}")
+
+    # Kick off warm-up without blocking startup
+    import asyncio
+    asyncio.create_task(warm_up())
     logger.info("=== Gotham Fitness AI Agent -- Web + Phone ready ===")
     logger.info(f"    Environment : {config.ENVIRONMENT}")
     logger.info(f"    CORS origins: {config.get_allowed_origins()}")
