@@ -170,9 +170,9 @@ async def web_session(ws: WebSocket):
                 })
             log.append({"role": "assistant", "text": text})
         except Exception as e:
-            logger.error(f"Error in send_response: {e}", exc_info=True)
+            logger.error(f"Error in send_response (synthesis/sending): {e}", exc_info=True)
             try:
-                await ws.send_json({"type": "error", "message": "Failed to synthesize speech"})
+                await ws.send_json({"type": "error", "message": f"TTS Failure: {str(e)}"})
             except Exception:
                 pass
 
@@ -237,7 +237,7 @@ async def web_session(ws: WebSocket):
                                     await ws.send_json({"type": "stt", "text": user_text})
                             except Exception as e:
                                 logger.error(f"Base64 STT error: {e}")
-                        continue
+                        # Don't continue - fall through to process user_text
                     elif msg.get("type") == "text_input":
                         content = msg.get("content", "")
                         if content == "[PING]":

@@ -15,6 +15,10 @@ async def run_hook(transcript: list[dict],
     """
     try:
         from backend.config import config
+        if not config.SUPABASE_URL or not config.SUPABASE_SERVICE_KEY:
+            print(f"[!] Skipping post-session hook: Supabase credentials missing (URL or Service Key)")
+            return
+
         db = create_client(
             config.SUPABASE_URL,
             config.SUPABASE_SERVICE_KEY
