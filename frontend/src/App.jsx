@@ -14,6 +14,7 @@ export default function App() {
   const [active,     setActive]     = useState(false)
   const activeRef = useRef(false)
   const [error,      setError]      = useState(null)
+  const [inputValue, setInputValue] = useState("")
   const audioQueueRef = useRef([])
   const playingRef    = useRef(false)
   const greetingTimeoutRef = useRef(null)
@@ -63,6 +64,7 @@ export default function App() {
     }
     if (msg.type === "stt") {
       setTranscript(t => [...t, { role: "user", text: msg.text }])
+      setInputValue(msg.text) // Fill the chat box as requested!
       setStatus("thinking")
     }
     if (msg.type === "error") {
@@ -92,7 +94,10 @@ export default function App() {
 
           try {
             await start((chunk) => {
-              if (activeRef.current) sendBytes(chunk)
+              if (activeRef.current) {
+                console.log(`[Mic] Sending ${chunk.byteLength} bytes to server...`)
+                sendBytes(chunk)
+              }
             })
           } catch {
             setError("Microphone access denied. Please allow mic and try again.")
@@ -179,19 +184,16 @@ export default function App() {
             className="text-row"
             onSubmit={(e) => {
               e.preventDefault()
-              const val = e.target.msg.value.trim()
-              if (!val) return
-              sendJson({ type: "text_input", content: val })
-              setTranscript(t => [...t, { role: "user", text: val }])
-              setStatus("thinking")
-              e.target.reset()
+              handleSend(inputValue)
             }}
           >
             <input
-              name        = "msg"
-              className   = "text-input"
-              placeholder = "Or type your message..."
-              autoComplete= "off"
+              type="text"
+              placeholder="Type your message..."
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-red-500/50 transition-colors"
+              onKeyPress={(e) => e.key === "Enter" && handleSend(inputValue)}
             />
             <button type="submit" className="send-btn">Send</button>
           </form>

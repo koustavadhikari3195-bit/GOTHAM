@@ -22,6 +22,7 @@ export default function useAudioStream() {
       const startRecorder = () => {
         if (!isRecordingRef.current || !streamRef.current) return
 
+        console.log("[Mic] Starting MediaRecorder...")
         const recorder = new MediaRecorder(streamRef.current, {
           mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
             ? "audio/webm;codecs=opus"
@@ -34,10 +35,12 @@ export default function useAudioStream() {
         }
 
         recorder.onstop = async () => {
+          console.log(`[Mic] Stopped. Collected ${chunks.length} chunks.`)
           if (chunks.length > 0) {
             const blob = new Blob(chunks, { type: "audio/webm" })
             // Convert Blob to ArrayBuffer for reliable binary transfer
             const buffer = await blob.arrayBuffer()
+            console.log(`[Mic] Emitting buffer: ${buffer.byteLength} bytes`)
             onChunk(buffer)
           }
           if (isRecordingRef.current) {

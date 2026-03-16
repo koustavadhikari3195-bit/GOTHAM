@@ -5,6 +5,7 @@ export default function useWebSocket(url) {
 
   const connect = useCallback(({ onMessage, onOpen, onError, onClose }) => {
     const ws = new WebSocket(url)
+    ws.binaryType = "arraybuffer"
     wsRef.current = ws
 
     ws.onopen = () => {
