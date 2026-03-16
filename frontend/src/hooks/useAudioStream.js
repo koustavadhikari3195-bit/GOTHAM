@@ -52,7 +52,7 @@ export default function useAudioStream() {
           if (recorder.state === "recording") {
             recorder.stop()
           }
-        }, 800)
+        }, 2000)
       }
 
       startRecorder()

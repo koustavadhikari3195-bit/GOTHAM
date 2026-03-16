@@ -14,9 +14,10 @@ async def run_hook(transcript: list[dict],
     3. Tags the lead with which channel they came from
     """
     try:
+        from backend.config import config
         db = create_client(
-            os.getenv("SUPABASE_URL"),
-            os.getenv("SUPABASE_SERVICE_KEY")
+            config.SUPABASE_URL,
+            config.SUPABASE_SERVICE_KEY
         )
 
         # Format transcript as readable text

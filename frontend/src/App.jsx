@@ -12,6 +12,7 @@ export default function App() {
   const [status,     setStatus]     = useState("idle")
   const [transcript, setTranscript] = useState([])
   const [active,     setActive]     = useState(false)
+  const activeRef = useRef(false)
   const [error,      setError]      = useState(null)
   const audioQueueRef = useRef([])
   const playingRef    = useRef(false)
@@ -74,6 +75,7 @@ export default function App() {
     setError(null)
     setTranscript([])
     setActive(true)
+    activeRef.current = true
     setStatus("connecting")
 
     try {
@@ -90,7 +92,7 @@ export default function App() {
 
           try {
             await start((chunk) => {
-              if (active) sendBytes(chunk)
+              if (activeRef.current) sendBytes(chunk)
             })
           } catch {
             setError("Microphone access denied. Please allow mic and try again.")
@@ -104,12 +106,13 @@ export default function App() {
           setStatus("idle")
         },
         onClose: () => {
-          if (playingRef.current) {
-            playingRef.current = false
-            audioQueueRef.current = []
-          }
+          setStatus("idle")
+          setActive(false)
+          activeRef.current = false
+          stop()
           if (greetingTimeoutRef.current) {
             clearTimeout(greetingTimeoutRef.current)
+            greetingTimeoutRef.current = null
           }
         },
       })
