@@ -1,16 +1,8 @@
 # ──────────────────────────────────────────────────
-# Multi-stage build: Node (frontend) + Python (backend)
+# Optimized Python-only Dockerfile
+# (Frontend is hosted separately on Vercel)
 # ──────────────────────────────────────────────────
 
-# Stage 1: Build frontend
-FROM node:20-slim AS frontend-build
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm ci --production=false
-COPY frontend/ ./
-RUN npm run build
-
-# Stage 2: Python backend + serve built frontend
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -22,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps
+# We install the CPU version of torch first to prevent large GPU package downloads
 COPY requirements.txt .
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt
@@ -32,12 +25,12 @@ COPY scripts/ ./scripts/
 # Copy secrets only if they exist (ignored by git, but might be provided in custom builds)
 COPY secrets* ./secrets/
 
-# Copy built frontend
-COPY --from=frontend-build /app/frontend/dist ./frontend/dist
-
 # Copy model files (if present in build context)
 COPY kokoro-v0_19.onnx* ./
 COPY voices.bin* ./
+
+# Ensure a dummy frontend folder exists so main.py doesn't error out looking for paths
+RUN mkdir -p frontend/dist
 
 EXPOSE 8000
 
