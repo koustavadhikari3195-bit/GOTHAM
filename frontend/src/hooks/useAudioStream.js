@@ -47,12 +47,12 @@ export default function useAudioStream() {
 
         recorder.start()
 
-        // Stop every 3 seconds to emit a fully valid WebM file
+        // Stop every 800ms to emit a fully valid WebM file for lower latency
         timerRef.current = setTimeout(() => {
           if (recorder.state === "recording") {
             recorder.stop()
           }
-        }, 3000)
+        }, 800)
       }
 
       startRecorder()

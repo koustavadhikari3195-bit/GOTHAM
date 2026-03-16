@@ -158,10 +158,12 @@ async def web_session(ws: WebSocket):
 
         # Opening greeting
         try:
+            logger.info("Generating opening greeting...")
             greeting = agent.chat(
                 "A new visitor just connected via the website. "
                 "Greet them warmly in the Gotham Fitness brand voice."
             )
+            logger.info(f"Greeting generated: {greeting[:50]}...")
         except Exception as e:
             logger.warning(f"Could not generate dynamic greeting: {e}")
             greeting = (
@@ -198,6 +200,13 @@ async def web_session(ws: WebSocket):
                         break
                     elif msg.get("type") == "text_input":
                         content = msg.get("content", "")
+                        if content == "[PING]":
+                            logger.info("Received reliability PING from frontend")
+                            # If we already have a log, don't re-greet
+                            if not log:
+                                await send_response(greeting)
+                            continue
+
                         if len(content) > 2000:
                             logger.warning("Text input too long, truncating")
                             content = content[:2000]

@@ -15,6 +15,7 @@ export default function App() {
   const [error,      setError]      = useState(null)
   const audioQueueRef = useRef([])
   const playingRef    = useRef(false)
+  const greetingTimeoutRef = useRef(null)
 
   const { connect, sendJson, sendBytes, close } = useWebSocket(WS_URL)
   const { start, stop } = useAudioStream()
@@ -39,11 +40,22 @@ export default function App() {
 
   const handleMessage = (msg) => {
     if (msg.type === "tts") {
+      // Clear greeting timeout if we get a response
+      if (greetingTimeoutRef.current) {
+        clearTimeout(greetingTimeoutRef.current)
+        greetingTimeoutRef.current = null
+      }
+
       setTranscript(t => [...t, { role: "assistant", text: msg.text }])
       if (msg.audio) {
-        const bytes = Uint8Array.from(atob(msg.audio), c => c.charCodeAt(0))
-        audioQueueRef.current.push({ bytes })
-        if (!playingRef.current) playNext()
+        try {
+          const bytes = Uint8Array.from(atob(msg.audio), c => c.charCodeAt(0))
+          audioQueueRef.current.push({ bytes })
+          if (!playingRef.current) playNext()
+        } catch (e) {
+          console.error("Audio decode error:", e)
+          setStatus("listening")
+        }
       } else {
         setStatus("listening")
       }
@@ -54,6 +66,7 @@ export default function App() {
     }
     if (msg.type === "error") {
       setError(msg.message || "Something went wrong")
+      setStatus("idle")
     }
   }
 
@@ -68,8 +81,17 @@ export default function App() {
         onMessage: handleMessage,
         onOpen: async () => {
           setStatus("listening")
+          
+          // Set a timeout for the initial greeting
+          greetingTimeoutRef.current = setTimeout(() => {
+            console.log("Greeting timeout - checking connection...")
+            sendJson({ type: "text_input", content: "[PING]" })
+          }, 3000)
+
           try {
-            await start((chunk) => sendBytes(chunk))
+            await start((chunk) => {
+              if (active) sendBytes(chunk)
+            })
           } catch {
             setError("Microphone access denied. Please allow mic and try again.")
             setActive(false)
@@ -85,6 +107,9 @@ export default function App() {
           if (playingRef.current) {
             playingRef.current = false
             audioQueueRef.current = []
+          }
+          if (greetingTimeoutRef.current) {
+            clearTimeout(greetingTimeoutRef.current)
           }
         },
       })
