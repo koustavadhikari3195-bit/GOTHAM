@@ -130,14 +130,15 @@ async def web_session(ws: WebSocket):
             logger.info(f"Synthesizing speech: {text[:50]}...")
             audio = await speak(text)
             if not audio:
-                logger.warning("TTS returned empty audio")
+                logger.warning("TTS returned EMPTY audio bytes")
                 await ws.send_json({
                     "type":  "tts",
                     "text":  text,
                     "audio": ""
                 })
             else:
-                logger.info(f"Speech synthesized ({len(audio)} bytes)")
+                audio_size = len(audio)
+                logger.info(f"Speech synthesized: {audio_size} bytes")
                 await ws.send_json({
                     "type":  "tts",
                     "text":  text,
