@@ -95,8 +95,16 @@ export default function App() {
           try {
             await start((chunk) => {
               if (activeRef.current) {
-                console.log(`[Mic] Sending ${chunk.byteLength} bytes to server...`)
-                sendBytes(chunk)
+                // Convert ArrayBuffer to Base64 for proxy-safe transmission
+                const uint8 = new Uint8Array(chunk)
+                let binary = ""
+                for (let i = 0; i < uint8.length; i++) {
+                  binary += String.fromCharCode(uint8[i])
+                }
+                const base64 = btoa(binary)
+                
+                console.log(`[Mic] Sending ${chunk.byteLength} bytes as Base64...`)
+                sendJson({ type: "audio", bytes: base64 })
               }
             })
           } catch {

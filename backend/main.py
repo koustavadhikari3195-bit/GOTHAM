@@ -223,11 +223,25 @@ async def web_session(ws: WebSocket):
                     if msg.get("type") == "end_session":
                         logger.info("Client requested session end")
                         break
+                    elif msg.get("type") == "audio":
+                        raw_b64 = msg.get("bytes", "")
+                        if raw_b64:
+                            import base64
+                            raw = base64.b64decode(raw_b64)
+                            logger.info(f"Received Base64 audio chunk: {len(raw)} bytes")
+                            # Run transcription
+                            try:
+                                user_text = transcribe(raw)
+                                if user_text:
+                                    logger.info(f"STT result: '{user_text}'")
+                                    await ws.send_json({"type": "stt", "text": user_text})
+                            except Exception as e:
+                                logger.error(f"Base64 STT error: {e}")
+                        continue
                     elif msg.get("type") == "text_input":
                         content = msg.get("content", "")
                         if content == "[PING]":
                             logger.info("Received reliability PING from frontend")
-                            # If we already have a log, don't re-greet
                             if not log:
                                 await send_response(greeting)
                             continue
