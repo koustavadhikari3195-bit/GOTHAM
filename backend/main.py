@@ -179,14 +179,19 @@ async def web_session(ws: WebSocket):
             # Voice audio bytes from browser mic
             if data.get("bytes"):
                 raw = data["bytes"]
+                logger.info(f"Received audio chunk: {len(raw)} bytes")
                 if len(raw) > MAX_MESSAGE_SIZE:
                     logger.warning(f"Audio chunk too large ({len(raw)} bytes), skipping")
                     continue
                 try:
                     user_text = transcribe(raw)
                     if user_text:
-                        logger.info(f"STT result: {user_text}")
+                        logger.info(f"STT result: '{user_text}'")
                         await ws.send_json({"type": "stt", "text": user_text})
+                    else:
+                        # Only log empty if it's not just a tiny blip
+                        if len(raw) > 1000:
+                            logger.debug("STT returned empty text for chunk")
                 except Exception as e:
                     logger.error(f"Transcription error: {e}", exc_info=True)
                     continue
