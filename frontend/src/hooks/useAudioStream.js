@@ -5,6 +5,9 @@ export default function useAudioStream() {
   const timerRef       = useRef(null)
   const isRecordingRef = useRef(false)
   const isPausedRef    = useRef(false)
+  const audioCtxRef    = useRef(null)
+  const analyserRef    = useRef(null)
+  const maxVolumeRef   = useRef(0)
 
   const start = async (onChunk) => {
     try {
@@ -20,6 +23,14 @@ export default function useAudioStream() {
       streamRef.current      = stream
       isRecordingRef.current = true
       isPausedRef.current    = false
+
+      // Setup audio analyzer for silence detection
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)()
+      analyserRef.current = audioCtxRef.current.createAnalyser()
+      analyserRef.current.fftSize = 256
+      
+      const source = audioCtxRef.current.createMediaStreamSource(stream)
+      source.connect(analyserRef.current)
 
       const startRecorder = () => {
         if (!isRecordingRef.current || !streamRef.current) return
@@ -38,11 +49,16 @@ export default function useAudioStream() {
         })
 
         let chunks = []
+        maxVolumeRef.current = 0 // Reset volume for this 3.5s window
+        let checkVolumeInterval
+
         recorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) chunks.push(e.data)
         }
 
         recorder.onstop = async () => {
+          clearInterval(checkVolumeInterval)
+
           // If paused (agent speaking), discard this chunk to avoid echo
           if (isPausedRef.current) {
             console.log("[Mic] Discarding chunk (agent speaking)")
@@ -53,7 +69,18 @@ export default function useAudioStream() {
             return
           }
 
-          console.log(`[Mic] Stopped. Collected ${chunks.length} chunks.`)
+          // If volume never crossed the threshold, it's silence. Discard.
+          const SILENCE_THRESHOLD = 5 // Adjust between 1-10 depending on mic sensitivity
+          if (maxVolumeRef.current < SILENCE_THRESHOLD) {
+            console.log(`[Mic] Discarding chunk (SILENCE detected, max vol: ${maxVolumeRef.current})`)
+            chunks = []
+            if (isRecordingRef.current) {
+              startRecorder()
+            }
+            return
+          }
+
+          console.log(`[Mic] Stopped. Collected ${chunks.length} chunks. Max vol: ${maxVolumeRef.current}`)
           if (chunks.length > 0) {
             const blob = new Blob(chunks, { type: "audio/webm" })
             const buffer = await blob.arrayBuffer()
@@ -66,6 +93,23 @@ export default function useAudioStream() {
         }
 
         recorder.start()
+
+        // Check volume every 100ms
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount)
+        checkVolumeInterval = setInterval(() => {
+          if (!isRecordingRef.current || isPausedRef.current) return
+          analyserRef.current.getByteFrequencyData(dataArray)
+          
+          // Calculate average volume in this moment
+          let sum = 0
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i]
+          }
+          const avg = sum / dataArray.length
+          if (avg > maxVolumeRef.current) {
+            maxVolumeRef.current = Math.round(avg)
+          }
+        }, 100)
 
         // Collect 3.5 seconds of audio for complete sentences
         timerRef.current = setTimeout(() => {
@@ -109,6 +153,11 @@ export default function useAudioStream() {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop())
       streamRef.current = null
+    }
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close()
+      audioCtxRef.current = null
+      analyserRef.current = null
     }
   }
 
