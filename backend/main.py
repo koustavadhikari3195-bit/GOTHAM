@@ -79,20 +79,16 @@ async def lifespan(app: FastAPI):
     config.validate()
     
     async def warm_up():
-        """Load AI models in background without blocking startup."""
+        """Load TTS model in background without blocking startup.
+        STT uses Groq API (primary) so no local model needed on startup.
+        Local Whisper only lazy-loads if Groq fails."""
         try:
             await asyncio.sleep(MODEL_WARMUP_DELAY_SECONDS)
-            from backend.voice.stt import _load as load_stt
             from backend.voice.tts import _load as load_tts
             
-            logger.info("Warming up AI models in background...")
+            logger.info("Warming up TTS model in background...")
             
-            # Load Whisper first (smaller footprint)
-            await asyncio.to_thread(load_stt)
-            logger.info("STT (Whisper) ready. Loading TTS...")
-            await asyncio.sleep(2)
-            
-            # Load Kokoro after a breather
+            # Only load TTS (Kokoro) — STT uses Groq API, no local model needed
             await asyncio.to_thread(load_tts)
             logger.info("TTS (Kokoro) ready")
             
@@ -289,7 +285,7 @@ async def web_session(ws: WebSocket):
             await ws.send_json({"type": "tts", "text": greeting, "audio": ""})
             log.append({"role": "assistant", "text": greeting})
 
-        # 2) Generate and send audio in the background (non-blocking)
+        # 2) Generate and send audio in the background, then signal start_listening
         async def _send_greeting_audio():
             try:
                 audio = await asyncio.to_thread(speak, greeting)
@@ -301,6 +297,11 @@ async def web_session(ws: WebSocket):
                     logger.info(f"Greeting audio sent: {len(audio)} bytes")
             except Exception as e:
                 logger.warning(f"Greeting TTS failed (text was already sent): {e}")
+            finally:
+                # Signal frontend to start the microphone AFTER greeting
+                if ws.client_state == WebSocketState.CONNECTED:
+                    await ws.send_json({"type": "start_listening"})
+                    logger.info("Sent start_listening signal")
 
         asyncio.create_task(_send_greeting_audio())
 

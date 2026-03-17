@@ -30,6 +30,7 @@ export default function App() {
   const audioQueueRef = useRef([])
   const playingRef    = useRef(false)
   const greetingTimeoutRef = useRef(null)
+  const micStartedRef = useRef(false)
 
   const { connect, sendJson, sendBytes, close } = useWebSocket(WS_URL)
   const { start, stop, pause, resume } = useAudioStream()
@@ -178,6 +179,13 @@ export default function App() {
         console.error("Background audio decode error:", e)
       }
     }
+
+    // Start listening signal — backend sends this AFTER greeting
+    if (msg.type === "start_listening" && !micStartedRef.current) {
+      console.log("[Session] Received start_listening — starting mic")
+      micStartedRef.current = true
+      startMic()
+    }
   }
 
   /**
@@ -212,65 +220,74 @@ export default function App() {
   }
 
   /**
+   * Start the microphone and begin sending audio chunks.
+   * Called when backend sends start_listening (after greeting).
+   */
+  const startMic = async () => {
+    try {
+      await start((chunk) => {
+        if (!activeRef.current) return
+        // Don't send audio while agent is speaking (prevents echo)
+        if (playingRef.current) {
+          console.log("[Mic] Skipping chunk (agent speaking)")
+          return
+        }
+
+        // Efficient base64 encoding
+        try {
+          const uint8 = new Uint8Array(chunk)
+          let binary
+          if (uint8.length > 50000) {
+            binary = Array.from(uint8).map(b => String.fromCharCode(b)).join("")
+          } else {
+            binary = String.fromCharCode.apply(null, Array.from(uint8))
+          }
+          const base64 = btoa(binary)
+
+          console.log(`[Mic] Sending ${chunk.byteLength} bytes...`)
+          sendJson({ type: "audio", bytes: base64 })
+        } catch (e) {
+          console.error("Audio encoding error:", e)
+          setError("Failed to encode audio")
+        }
+      })
+      setStatus("listening")
+    } catch (err) {
+      console.error("Microphone error:", err)
+      setError("Microphone access denied. Please allow mic and try again.")
+      setActive(false)
+      activeRef.current = false
+      setStatus("idle")
+    }
+  }
+
+  /**
    * Start voice session
-   * Connects to WebSocket and begins audio capture
+   * Connects to WebSocket and waits for greeting before starting mic
    */
   const startSession = async () => {
     setError(null)
     setTranscript([])
     setActive(true)
     activeRef.current = true
+    micStartedRef.current = false
     setStatus("connecting")
 
     try {
       connect({
         onMessage: handleMessage,
         onOpen: async () => {
-          setStatus("listening")
+          setStatus("connected")
+          console.log("[Session] Connected — waiting for greeting...")
 
           // Set timeout for initial greeting
           greetingTimeoutRef.current = setTimeout(() => {
-            console.log("Greeting timeout - checking connection...")
-            sendJson({ type: "text_input", content: "[PING]" })
+            console.log("Greeting timeout - starting mic anyway")
+            if (!micStartedRef.current) {
+              micStartedRef.current = true
+              startMic()
+            }
           }, GREETING_TIMEOUT_MS)
-
-          try {
-            // Start microphone stream
-            await start((chunk) => {
-              if (!activeRef.current) return
-              // Don't send audio while agent is speaking (prevents echo)
-              if (playingRef.current) {
-                console.log("[Mic] Skipping chunk (agent speaking)")
-                return
-              }
-
-              // Efficient base64 encoding
-              try {
-                const uint8 = new Uint8Array(chunk)
-                // Use apply for smaller buffers, fallback for larger
-                let binary
-                if (uint8.length > 50000) {
-                  // For large buffers, use a loop to avoid stack overflow
-                  binary = Array.from(uint8).map(b => String.fromCharCode(b)).join("")
-                } else {
-                  binary = String.fromCharCode.apply(null, Array.from(uint8))
-                }
-                const base64 = btoa(binary)
-
-                console.log(`[Mic] Sending ${chunk.byteLength} bytes...`)
-                sendJson({ type: "audio", bytes: base64 })
-              } catch (e) {
-                console.error("Audio encoding error:", e)
-                setError("Failed to encode audio")
-              }
-            })
-          } catch (err) {
-            console.error("Microphone error:", err)
-            setError("Microphone access denied. Please allow mic and try again.")
-            setActive(false)
-            activeRef.current = false
-            setStatus("idle")
-          }
         },
         onError: (err) => {
           console.error("WebSocket error:", err)
