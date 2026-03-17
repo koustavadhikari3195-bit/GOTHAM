@@ -342,7 +342,7 @@ export default function App() {
               placeholder="Type your message..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-red-500/50 transition-colors"
+              className="text-input"
               onKeyPress={(e) => e.key === "Enter" && handleSend(inputValue)}
             />
             <button type="submit" className="send-btn">Send</button>

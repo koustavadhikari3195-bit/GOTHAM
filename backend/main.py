@@ -6,6 +6,7 @@ import contextvars
 import asyncio
 from typing import Optional, Dict, Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response
+from starlette.websockets import WebSocketState
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
@@ -223,21 +224,24 @@ async def web_session(ws: WebSocket):
             logger.info(f"Synthesizing speech: {text[:50]}...")
             audio = await asyncio.to_thread(speak, text)
             
-            if not audio:
-                logger.warning("TTS returned empty audio bytes")
-                await ws.send_json({
-                    "type": "tts",
-                    "text": text,
-                    "audio": ""
-                })
+            if ws.client_state == WebSocketState.CONNECTED:
+                if not audio:
+                    logger.warning("TTS returned empty audio bytes")
+                    await ws.send_json({
+                        "type": "tts",
+                        "text": text,
+                        "audio": ""
+                    })
+                else:
+                    audio_size = len(audio)
+                    logger.info(f"Speech synthesized: {audio_size} bytes")
+                    await ws.send_json({
+                        "type": "tts",
+                        "text": text,
+                        "audio": base64.b64encode(audio).decode()
+                    })
             else:
-                audio_size = len(audio)
-                logger.info(f"Speech synthesized: {audio_size} bytes")
-                await ws.send_json({
-                    "type": "tts",
-                    "text": text,
-                    "audio": base64.b64encode(audio).decode()
-                })
+                logger.warning("WebSocket closed before TTS response could be sent")
             log.append({"role": "assistant", "text": text})
         except asyncio.TimeoutError:
             logger.error("TTS timeout")
@@ -335,25 +339,23 @@ async def web_session(ws: WebSocket):
                         logger.info(f"Received audio: {len(raw)} bytes")
                         
                         # Transcribe with timeout
-                        try:
-                            stt_text = await asyncio.to_thread(
-                                transcribe, raw
-                            )
-                            
-                            # Filter common hallucinations
-                            hallucinations = ["you", "thank you.", "subtitles by"]
-                            if stt_text and stt_text.lower().strip() not in hallucinations:
-                                user_text = stt_text
-                                logger.info(f"STT result: '{user_text}'")
+                        stt_text = await asyncio.to_thread(
+                            transcribe, raw
+                        )
+                        
+                        # Filter common hallucinations & noise
+                        hallucinations = [
+                            "you", "thank you.", "subtitles by", "thanks for watching",
+                            "thank you for watching", "bye", "okay", "um", "uh"
+                        ]
+                        trimmed_stt = stt_text.lower().strip()
+                        if stt_text and len(trimmed_stt) > 1 and trimmed_stt not in hallucinations:
+                            user_text = stt_text
+                            logger.info(f"STT result: '{user_text}'")
+                            if ws.client_state == WebSocketState.CONNECTED:
                                 await ws.send_json({"type": "stt", "text": user_text})
-                        except asyncio.TimeoutError:
-                            logger.error("STT timeout")
-                            await ws.send_json({"type": "error", "message": "Speech recognition timeout"})
-                    except (Exception, ValueError) as e:
-                        logger.error(f"Base64 or decode error: {e}")
-                        continue
                     except Exception as e:
-                        logger.error(f"STT Error: {e}", exc_info=True)
+                        logger.error(f"STT or processing error: {e}")
                             
                 elif mtype == "text_input":
                     content = msg.get("content", "")
@@ -488,11 +490,12 @@ async def phone_session(ws: WebSocket):
             mulaw_bytes = await asyncio.to_thread(wav_to_mulaw, wav_bytes)
             payload = base64.b64encode(mulaw_bytes).decode()
             
-            await ws.send_json({
-                "event": "media",
-                "streamSid": stream_sid,
-                "media": {"payload": payload}
-            })
+            if ws.client_state == WebSocketState.CONNECTED:
+                await ws.send_json({
+                    "event": "media",
+                    "streamSid": stream_sid,
+                    "media": {"payload": payload}
+                })
             log.append({"role": "assistant", "text": text})
         except asyncio.TimeoutError:
             logger.error("TTS timeout on phone channel")

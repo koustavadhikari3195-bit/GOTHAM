@@ -7,7 +7,6 @@ Models:   download kokoro-v0_19.onnx and voices.bin from
           https://github.com/thewh1teagle/kokoro-onnx/releases
 
 Voice options:
-Voice options:
   af_bella — warm, friendly female (recommended default)
   af_sky   — another warm female voice
   am_adam  — energetic male
@@ -39,9 +38,9 @@ def _load():
     return _pipeline
 
 
-async def speak(text: str,
-                voice: str  = "af_bella",
-                speed: float = 1.1) -> bytes:
+def speak(text: str,
+          voice: str  = "af_bella",
+          speed: float = 1.1) -> bytes:
     """
     Convert text to speech. Returns WAV bytes.
     Returns empty bytes if Kokoro is unavailable (frontend shows text only).
