@@ -28,8 +28,8 @@ RATE_LIMIT_SIGNALS = [
 
 class AgentRouter:
     def __init__(self):
-        self.lite      = GeminiAgent(model="gemini-1.5-flash")
-        self.flash     = GeminiAgent(model="gemini-2.0-flash")
+        self.lite      = GeminiAgent(model="gemini-2.0-flash")  # Simple tasks (was 1.5-flash)
+        self.flash     = GeminiAgent(model="gemini-2.0-flash")  # Complex tasks + tool calling
         self.groq      = GroqAgent()
         self._mode     = "gemini"   # "gemini" | "groq"
         self.lead_data = {}
