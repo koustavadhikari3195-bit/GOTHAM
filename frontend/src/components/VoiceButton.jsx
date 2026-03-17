@@ -55,10 +55,10 @@ export default function VoiceButton({ active, onClick, disabled }) {
         }
 
         .voice-btn.active {
-          background: rgba(255, 255, 255, 0.05);
-          color: rgba(255, 255, 255, 0.6);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          box-shadow: none;
+          background: rgba(230, 57, 70, 0.08);
+          color: #fff;
+          border: 1px solid var(--red);
+          box-shadow: 0 0 20px rgba(230, 57, 70, 0.1);
         }
 
         .voice-btn.disabled {
