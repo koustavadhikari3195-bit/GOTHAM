@@ -144,7 +144,27 @@ export default function App() {
     if (msg.type === "error") {
       const errorMessage = msg.message || "Unknown error from server"
       setError(errorMessage)
-      setStatus("idle")
+      // Don't reset to idle - let the user keep talking
+      if (errorMessage.includes("timeout") || errorMessage.includes("expired")) {
+        setStatus("idle")
+      }
+    }
+
+    // Background TTS audio (e.g. greeting audio arriving after text was already shown)
+    if (msg.type === "tts_audio" && msg.audio && typeof msg.audio === "string") {
+      try {
+        const binaryString = atob(msg.audio)
+        const bytes = new Uint8Array(binaryString.length)
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i)
+        }
+        audioQueueRef.current.push({ bytes })
+        if (!playingRef.current) {
+          playNext()
+        }
+      } catch (e) {
+        console.error("Background audio decode error:", e)
+      }
     }
   }
 

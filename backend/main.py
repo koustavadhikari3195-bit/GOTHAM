@@ -31,6 +31,7 @@ MAX_INPUT_LENGTH = 5000  # Max user text length
 CHUNK_SIZE = 8000  # ~1 second of 8kHz audio
 SILENCE_THRESHOLD = 2  # Minimum transcription length
 SESSION_TIMEOUT_SECONDS = 30 * 60  # 30 minute session timeout
+AGENT_CHAT_TIMEOUT = 30  # 30 second timeout for LLM responses
 MODEL_WARMUP_DELAY_SECONDS = 2
 
 # ==============================================================================
@@ -274,15 +275,34 @@ async def web_session(ws: WebSocket):
         agent = AgentRouter()
         logger.info("AgentRouter ready")
 
-        # Fast Opening Greeting
+        # Fast Opening Greeting — send text IMMEDIATELY, then TTS in background
         greetings = [
             "Welcome to Gotham Fitness! I'm your AI concierge. What brings you in today?",
             "Hey there! Welcome to Gotham. I'm here to help you get started. What are your fitness goals?",
             "Welcome to Gotham Fitness! Ready to crush some goals? I'm your AI concierge—how can I help you today?"
         ]
         greeting = random.choice(greetings)
-        logger.info(f"Sending greeting")
-        await send_response(greeting)
+        logger.info("Sending instant greeting text")
+
+        # 1) Send text immediately so the user sees a greeting within milliseconds
+        if ws.client_state == WebSocketState.CONNECTED:
+            await ws.send_json({"type": "tts", "text": greeting, "audio": ""})
+            log.append({"role": "assistant", "text": greeting})
+
+        # 2) Generate and send audio in the background (non-blocking)
+        async def _send_greeting_audio():
+            try:
+                audio = await asyncio.to_thread(speak, greeting)
+                if audio and ws.client_state == WebSocketState.CONNECTED:
+                    await ws.send_json({
+                        "type": "tts_audio",
+                        "audio": base64.b64encode(audio).decode()
+                    })
+                    logger.info(f"Greeting audio sent: {len(audio)} bytes")
+            except Exception as e:
+                logger.warning(f"Greeting TTS failed (text was already sent): {e}")
+
+        asyncio.create_task(_send_greeting_audio())
 
         while True:
             # Check session timeout
@@ -390,20 +410,34 @@ async def web_session(ws: WebSocket):
             if user_text and agent:
                 log.append({"role": "user", "text": user_text})
                 try:
-                    response = await asyncio.to_thread(agent.chat, user_text)
+                    response = await asyncio.wait_for(
+                        asyncio.to_thread(agent.chat, user_text),
+                        timeout=AGENT_CHAT_TIMEOUT
+                    )
                     await send_response(response)
                 except asyncio.TimeoutError:
-                    logger.error("Agent chat timeout")
+                    logger.error(f"Agent chat timed out after {AGENT_CHAT_TIMEOUT}s")
                     try:
                         if ws.client_state == WebSocketState.CONNECTED:
-                            await ws.send_json({"type": "error", "message": "Response timeout"})
+                            await ws.send_json({
+                                "type": "error",
+                                "message": "I took too long to think! Could you try rephrasing that?"
+                            })
                     except Exception:
                         pass
                 except Exception as e:
+                    error_str = str(e).lower()
                     logger.error(f"Agent chat error: {e}", exc_info=True)
                     try:
                         if ws.client_state == WebSocketState.CONNECTED:
-                            await ws.send_json({"type": "error", "message": "Agent error"})
+                            # Provide user-friendly messages based on error type
+                            if any(s in error_str for s in ["429", "quota", "rate_limit", "resource_exhausted"]):
+                                user_msg = "I'm getting a lot of visitors right now! 🏋️ Please try again in a moment."
+                            elif any(s in error_str for s in ["connection", "timeout", "network"]):
+                                user_msg = "I had a connection hiccup. Could you say that again?"
+                            else:
+                                user_msg = "Sorry, I had a brief hiccup. Could you repeat that?"
+                            await ws.send_json({"type": "error", "message": user_msg})
                     except Exception:
                         pass
 
