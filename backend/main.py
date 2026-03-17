@@ -613,6 +613,22 @@ async def phone_session(ws: WebSocket):
 
 
 # ==============================================================================
+# HTTP ROUTES (Health & Info)
+# ==============================================================================
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "service": "Gotham Fitness AI Agent API",
+        "message": "WebSocket server is running. Frontend should connect to /ws/chat.",
+        "docs": "/docs"
+    }
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "models_loaded": _models_ready.is_set() if _models_ready else False}
+
+# ==============================================================================
 # FRONTEND INITIALIZATION
 # ==============================================================================
 # Must be at the very end to not intercept other routes
