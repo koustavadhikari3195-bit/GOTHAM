@@ -1,3 +1,13 @@
+---
+title: GOTHAM FITNESS
+emoji: 🏋️
+colorFrom: red
+colorTo: black
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Gotham Fitness AI Agent — Voice Concierge
 
 A production-ready AI voice agent for gym lead generation and booking. Runs fully locally (Whisper/Kokoro) with LLM orchestration via Gemini and Groq.
