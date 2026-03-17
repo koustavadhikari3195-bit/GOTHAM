@@ -32,7 +32,7 @@ export default function App() {
   const greetingTimeoutRef = useRef(null)
 
   const { connect, sendJson, sendBytes, close } = useWebSocket(WS_URL)
-  const { start, stop } = useAudioStream()
+  const { start, stop, pause, resume } = useAudioStream()
 
   /**
    * Play audio queue sequentially with re-entry guard
@@ -44,12 +44,14 @@ export default function App() {
       if (!audioQueueRef.current.length) {
         playingRef.current = false
         setStatus("listening")
+        resume() // Resume mic when all audio done
       }
       return
     }
 
     playingRef.current = true
     setStatus("speaking")
+    pause() // Mute mic while agent speaks
 
     const { bytes } = audioQueueRef.current.shift()
     const blob = new Blob([bytes], { type: "audio/wav" })
@@ -236,6 +238,11 @@ export default function App() {
             // Start microphone stream
             await start((chunk) => {
               if (!activeRef.current) return
+              // Don't send audio while agent is speaking (prevents echo)
+              if (playingRef.current) {
+                console.log("[Mic] Skipping chunk (agent speaking)")
+                return
+              }
 
               // Efficient base64 encoding
               try {

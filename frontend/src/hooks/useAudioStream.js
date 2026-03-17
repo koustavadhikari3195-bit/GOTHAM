@@ -4,6 +4,7 @@ export default function useAudioStream() {
   const streamRef      = useRef(null)
   const timerRef       = useRef(null)
   const isRecordingRef = useRef(false)
+  const isPausedRef    = useRef(false)
 
   const start = async (onChunk) => {
     try {
@@ -18,9 +19,16 @@ export default function useAudioStream() {
       })
       streamRef.current      = stream
       isRecordingRef.current = true
+      isPausedRef.current    = false
 
       const startRecorder = () => {
         if (!isRecordingRef.current || !streamRef.current) return
+
+        // Don't start a new recording cycle if paused — wait and retry
+        if (isPausedRef.current) {
+          timerRef.current = setTimeout(startRecorder, 500)
+          return
+        }
 
         console.log("[Mic] Starting MediaRecorder...")
         const recorder = new MediaRecorder(streamRef.current, {
@@ -35,10 +43,19 @@ export default function useAudioStream() {
         }
 
         recorder.onstop = async () => {
+          // If paused (agent speaking), discard this chunk to avoid echo
+          if (isPausedRef.current) {
+            console.log("[Mic] Discarding chunk (agent speaking)")
+            chunks = []
+            if (isRecordingRef.current) {
+              startRecorder() // Will loop back and wait
+            }
+            return
+          }
+
           console.log(`[Mic] Stopped. Collected ${chunks.length} chunks.`)
           if (chunks.length > 0) {
             const blob = new Blob(chunks, { type: "audio/webm" })
-            // Convert Blob to ArrayBuffer for reliable binary transfer
             const buffer = await blob.arrayBuffer()
             console.log(`[Mic] Emitting buffer: ${buffer.byteLength} bytes`)
             onChunk(buffer)
@@ -50,12 +67,12 @@ export default function useAudioStream() {
 
         recorder.start()
 
-        // Stop every 800ms to emit a fully valid WebM file for lower latency
+        // Collect 3.5 seconds of audio for complete sentences
         timerRef.current = setTimeout(() => {
           if (recorder.state === "recording") {
             recorder.stop()
           }
-        }, 2000)
+        }, 3500)
       }
 
       startRecorder()
@@ -65,8 +82,29 @@ export default function useAudioStream() {
     }
   }
 
+  /** Pause recording — used when agent is speaking to prevent echo */
+  const pause = () => {
+    isPausedRef.current = true
+    console.log("[Mic] Paused (agent speaking)")
+    // Mute the mic tracks to prevent any audio capture
+    if (streamRef.current) {
+      streamRef.current.getAudioTracks().forEach(t => { t.enabled = false })
+    }
+  }
+
+  /** Resume recording — used after agent finishes speaking */
+  const resume = () => {
+    isPausedRef.current = false
+    console.log("[Mic] Resumed (agent done)")
+    // Un-mute the mic tracks
+    if (streamRef.current) {
+      streamRef.current.getAudioTracks().forEach(t => { t.enabled = true })
+    }
+  }
+
   const stop = () => {
     isRecordingRef.current = false
+    isPausedRef.current = false
     if (timerRef.current) clearTimeout(timerRef.current)
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop())
@@ -74,5 +112,5 @@ export default function useAudioStream() {
     }
   }
 
-  return { start, stop }
+  return { start, stop, pause, resume }
 }
