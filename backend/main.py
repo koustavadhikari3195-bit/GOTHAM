@@ -89,8 +89,8 @@ async def lifespan(app: FastAPI):
             
             # Load Whisper first (smaller footprint)
             await asyncio.to_thread(load_stt)
-            logger.info("STT (Whisper) ready. Waiting 10s to stagger memory load...")
-            await asyncio.sleep(10)
+            logger.info("STT (Whisper) ready. Loading TTS...")
+            await asyncio.sleep(2)
             
             # Load Kokoro after a breather
             await asyncio.to_thread(load_tts)
@@ -360,24 +360,43 @@ async def web_session(ws: WebSocket):
                         raw = base64.b64decode(raw_b64)
                         logger.info(f"Received audio: {len(raw)} bytes")
                         
+                        # Tell client we're transcribing
+                        if ws.client_state == WebSocketState.CONNECTED:
+                            await ws.send_json({"type": "status", "status": "transcribing"})
+                        
                         # Transcribe with timeout
-                        stt_text = await asyncio.to_thread(
-                            transcribe, raw
+                        stt_text = await asyncio.wait_for(
+                            asyncio.to_thread(transcribe, raw),
+                            timeout=15
                         )
                         
                         # Filter common hallucinations & noise
                         hallucinations = [
                             "you", "thank you.", "subtitles by", "thanks for watching",
-                            "thank you for watching", "bye", "okay", "um", "uh"
+                            "thank you for watching", "bye", "okay", "um", "uh",
+                            "hmm", "huh", "oh", "ah", "yeah", "yes", "no",
+                            ".", "..", "...", "the", "i", "a",
+                            "thanks", "thank you", "goodbye", "bye bye",
+                            "subscribe", "like and subscribe"
                         ]
-                        trimmed_stt = stt_text.lower().strip()
-                        if stt_text and len(trimmed_stt) > 1 and trimmed_stt not in hallucinations:
+                        trimmed_stt = stt_text.lower().strip().rstrip('.')
+                        if stt_text and len(trimmed_stt) > 2 and trimmed_stt not in hallucinations:
                             user_text = stt_text
                             logger.info(f"STT result: '{user_text}'")
                             if ws.client_state == WebSocketState.CONNECTED:
                                 await ws.send_json({"type": "stt", "text": user_text})
+                        else:
+                            # Resume listening if it was just noise
+                            if ws.client_state == WebSocketState.CONNECTED:
+                                await ws.send_json({"type": "status", "status": "listening"})
+                    except asyncio.TimeoutError:
+                        logger.warning("STT timeout — skipping chunk")
+                        if ws.client_state == WebSocketState.CONNECTED:
+                            await ws.send_json({"type": "status", "status": "listening"})
                     except Exception as e:
                         logger.error(f"STT or processing error: {e}")
+                        if ws.client_state == WebSocketState.CONNECTED:
+                            await ws.send_json({"type": "status", "status": "listening"})
                             
                 elif mtype == "text_input":
                     content = msg.get("content", "")
@@ -410,6 +429,10 @@ async def web_session(ws: WebSocket):
             if user_text and agent:
                 log.append({"role": "user", "text": user_text})
                 try:
+                    # Tell client we're thinking
+                    if ws.client_state == WebSocketState.CONNECTED:
+                        await ws.send_json({"type": "status", "status": "thinking"})
+                    
                     response = await asyncio.wait_for(
                         asyncio.to_thread(agent.chat, user_text),
                         timeout=AGENT_CHAT_TIMEOUT

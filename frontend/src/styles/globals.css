@@ -196,6 +196,17 @@ html, body, #root {
   display: flex;
   gap: 10px;
   align-items: center;
+  animation: errorFadeIn 0.3s ease-out, errorFadeOut 0.5s ease-in 4.5s forwards;
+}
+
+@keyframes errorFadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes errorFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; transform: translateY(-5px); }
 }
 
 /* ─── INPUTS ─────────────────────────────────────────── */

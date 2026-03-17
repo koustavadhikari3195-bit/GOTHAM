@@ -98,6 +98,7 @@ export default function App() {
 
     // TTS response: audio from agent
     if (msg.type === "tts" && typeof msg.text === "string") {
+      setError(null) // Clear any previous errors on successful response
       setTranscript(t => [...t, { role: "assistant", text: msg.text }])
       
       if (msg.audio && typeof msg.audio === "string") {
@@ -147,7 +148,16 @@ export default function App() {
       // Don't reset to idle - let the user keep talking
       if (errorMessage.includes("timeout") || errorMessage.includes("expired")) {
         setStatus("idle")
+      } else {
+        setStatus("listening") // Resume listening after non-fatal errors
       }
+      // Auto-clear error after 5 seconds
+      setTimeout(() => setError(null), 5000)
+    }
+
+    // Real-time status updates from server
+    if (msg.type === "status" && msg.status) {
+      setStatus(msg.status)
     }
 
     // Background TTS audio (e.g. greeting audio arriving after text was already shown)
