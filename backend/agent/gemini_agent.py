@@ -1,8 +1,19 @@
 import os
+import re
+import json
+import logging
 from google import genai
 from google.genai import types
 from .system_prompt import SYSTEM_PROMPT
 from .tools import GEMINI_TOOLS
+
+logger = logging.getLogger("gotham-agent.gemini")
+
+# Regex to match text-based function calls like <function=name>{...}</function>
+FUNCTION_CALL_PATTERN = re.compile(
+    r'<function[=\s]+([\w]+)>\s*(.+?)\s*</function>',
+    re.DOTALL
+)
 
 
 class GeminiAgent:
@@ -30,6 +41,41 @@ class GeminiAgent:
 
         return result
 
+    def _sanitize_response(self, text: str) -> str:
+        """
+        Strip raw function-call XML from text responses.
+        Sometimes Gemini 1.5 Flash emits <function=name>{...}</function>
+        in text instead of using the proper function_call API.
+        """
+        if not text:
+            return text
+
+        # Find and execute any embedded function calls
+        matches = FUNCTION_CALL_PATTERN.findall(text)
+        for fn_name, fn_args_str in matches:
+            try:
+                fn_args = json.loads(fn_args_str)
+                logger.info(f"Executing embedded function call: {fn_name}({fn_args})")
+                self._dispatch_tool(fn_name, fn_args)
+            except Exception as e:
+                logger.warning(f"Failed to execute embedded function call {fn_name}: {e}")
+
+        # Remove the function call XML from the text
+        cleaned = FUNCTION_CALL_PATTERN.sub('', text)
+
+        # Also clean up any other common markup artifacts
+        cleaned = re.sub(r'</?function[^>]*>', '', cleaned)
+        cleaned = re.sub(r'\{"name"\s*:.*?\}', '', cleaned)  # stray JSON objects
+
+        # Clean up extra whitespace left behind
+        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+        cleaned = cleaned.strip()
+
+        if not cleaned:
+            return "Got it! I'm processing that for you. What else can I help with?"
+
+        return cleaned
+
     def chat(self, user_message: str) -> str:
         self.history.append(
             types.Content(role="user",
@@ -53,6 +99,7 @@ class GeminiAgent:
         # No tool call — plain text response
         if not fcs:
             text = resp.text or "I'm sorry, I didn't quite catch that. Could you repeat?"
+            text = self._sanitize_response(text)
             self.history.append(
                 types.Content(role="model",
                               parts=[types.Part.from_text(text=text)])
@@ -83,6 +130,7 @@ class GeminiAgent:
             )
         )
         text = final.text
+        text = self._sanitize_response(text)
         self.history.append(
             types.Content(role="model",
                           parts=[types.Part.from_text(text=text)])

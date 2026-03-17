@@ -1,8 +1,18 @@
 import os
+import re
 import json
+import logging
 from groq import Groq
 from .system_prompt import SYSTEM_PROMPT
 from .tools import GROQ_TOOLS
+
+logger = logging.getLogger("gotham-agent.groq")
+
+# Regex to match text-based function calls like <function=name>{...}</function>
+FUNCTION_CALL_PATTERN = re.compile(
+    r'<function[=\s]+([\w]+)>\s*(.+?)\s*</function>',
+    re.DOTALL
+)
 
 
 class GroqAgent:
@@ -35,6 +45,32 @@ class GroqAgent:
 
         return result
 
+    def _sanitize_response(self, text: str) -> str:
+        """Strip raw function-call XML from text responses."""
+        if not text:
+            return text
+
+        # Find and execute any embedded function calls
+        matches = FUNCTION_CALL_PATTERN.findall(text)
+        for fn_name, fn_args_str in matches:
+            try:
+                fn_args = json.loads(fn_args_str)
+                logger.info(f"Executing embedded function call: {fn_name}({fn_args})")
+                self._dispatch_tool(fn_name, fn_args)
+            except Exception as e:
+                logger.warning(f"Failed to execute embedded function call {fn_name}: {e}")
+
+        cleaned = FUNCTION_CALL_PATTERN.sub('', text)
+        cleaned = re.sub(r'</?function[^>]*>', '', cleaned)
+        cleaned = re.sub(r'\{"name"\s*:.*?\}', '', cleaned)
+        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+        cleaned = cleaned.strip()
+
+        if not cleaned:
+            return "Got it! I'm processing that for you. What else can I help with?"
+
+        return cleaned
+
     def chat(self, user_message: str) -> str:
         self.history.append({"role": "user", "content": user_message})
 
@@ -49,9 +85,9 @@ class GroqAgent:
 
         msg = resp.choices[0].message
 
-        # No tool calls
         if not msg.tool_calls:
             text = msg.content
+            text = self._sanitize_response(text)
             self.history.append({"role": "assistant", "content": text})
             return text
 
@@ -73,6 +109,7 @@ class GroqAgent:
             max_tokens=512,
         )
         text = final.choices[0].message.content
+        text = self._sanitize_response(text)
         self.history.append({"role": "assistant", "content": text})
         return text
 

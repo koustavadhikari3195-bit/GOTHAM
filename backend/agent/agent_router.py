@@ -10,6 +10,9 @@ Your usage at 500 customers/month: ~167/day = 1% of capacity
 """
 from .gemini_agent import GeminiAgent
 from .groq_agent   import GroqAgent
+import logging
+
+logger = logging.getLogger("gotham-agent.router")
 
 COMPLEX_KEYWORDS = [
     "book", "schedule", "calendar", "appointment", "session",
@@ -68,7 +71,7 @@ class AgentRouter:
 
         except Exception as e:
             if self._is_rate_limit(e):
-                print(f"[!] Gemini rate limit hit -> switching to Groq fallback")
+                logger.warning("Gemini rate limit hit -> switching to Groq fallback")
                 self._mode = "groq"
                 self._sync_context_to_groq()
                 try:
