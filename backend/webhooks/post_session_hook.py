@@ -1,6 +1,8 @@
-import os
+import logging
 from datetime import datetime
 from supabase import create_client
+
+logger = logging.getLogger("gotham-agent.hooks")
 
 
 async def run_hook(transcript: list[dict],
@@ -16,7 +18,7 @@ async def run_hook(transcript: list[dict],
     try:
         from backend.config import config
         if not config.SUPABASE_URL or not config.SUPABASE_SERVICE_KEY:
-            print(f"[!] Skipping post-session hook: Supabase credentials missing (URL or Service Key)")
+            logger.warning("Skipping post-session hook: Supabase credentials missing (URL or Service Key)")
             return
 
         db = create_client(
@@ -51,9 +53,11 @@ async def run_hook(transcript: list[dict],
             "channel":    channel,
         }).execute()
 
-        print(f"[+] [{channel.upper()}] Session saved | "
-              f"Lead: {lead_data.get('name', 'Unknown')} | "
-              f"Turns: {len(transcript)}")
+        logger.info(
+            f"[{channel.upper()}] Session saved | "
+            f"Lead: {lead_data.get('name', 'Unknown')} | "
+            f"Turns: {len(transcript)}"
+        )
 
     except Exception as e:
-        print(f"[!] Post-session hook error: {e}")
+        logger.error(f"Post-session hook error: {e}", exc_info=True)

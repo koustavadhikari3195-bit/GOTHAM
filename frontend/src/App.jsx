@@ -343,7 +343,7 @@ export default function App() {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               className="text-input"
-              onKeyPress={(e) => e.key === "Enter" && handleSend(inputValue)}
+              onKeyDown={(e) => e.key === "Enter" && handleSend(inputValue)}
             />
             <button type="submit" className="send-btn">Send</button>
           </form>

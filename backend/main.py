@@ -2,6 +2,7 @@ import json
 import base64
 import logging
 import uuid
+import random
 import contextvars
 import asyncio
 from typing import Optional, Dict, Any
@@ -246,13 +247,15 @@ async def web_session(ws: WebSocket):
         except asyncio.TimeoutError:
             logger.error("TTS timeout")
             try:
-                await ws.send_json({"type": "error", "message": "TTS timeout. Please try again."})
+                if ws.client_state == WebSocketState.CONNECTED:
+                    await ws.send_json({"type": "error", "message": "TTS timeout. Please try again."})
             except Exception:
                 pass
         except Exception as e:
             logger.error(f"Error in send_response: {e}", exc_info=True)
             try:
-                await ws.send_json({"type": "error", "message": "TTS error"})
+                if ws.client_state == WebSocketState.CONNECTED:
+                    await ws.send_json({"type": "error", "message": "TTS error"})
             except Exception:
                 pass
 
@@ -272,7 +275,6 @@ async def web_session(ws: WebSocket):
         logger.info("AgentRouter ready")
 
         # Fast Opening Greeting
-        import random
         greetings = [
             "Welcome to Gotham Fitness! I'm your AI concierge. What brings you in today?",
             "Hey there! Welcome to Gotham. I'm here to help you get started. What are your fitness goals?",
@@ -393,14 +395,16 @@ async def web_session(ws: WebSocket):
                 except asyncio.TimeoutError:
                     logger.error("Agent chat timeout")
                     try:
-                        await ws.send_json({"type": "error", "message": "Response timeout"})
-                    except:
+                        if ws.client_state == WebSocketState.CONNECTED:
+                            await ws.send_json({"type": "error", "message": "Response timeout"})
+                    except Exception:
                         pass
                 except Exception as e:
                     logger.error(f"Agent chat error: {e}", exc_info=True)
                     try:
-                        await ws.send_json({"type": "error", "message": "Agent error"})
-                    except:
+                        if ws.client_state == WebSocketState.CONNECTED:
+                            await ws.send_json({"type": "error", "message": "Agent error"})
+                    except Exception:
                         pass
 
     except WebSocketDisconnect:
@@ -611,22 +615,6 @@ async def phone_session(ws: WebSocket):
         except Exception:
             pass
 
-
-# ==============================================================================
-# HTTP ROUTES (Health & Info)
-# ==============================================================================
-@app.get("/")
-async def root():
-    return {
-        "status": "online",
-        "service": "Gotham Fitness AI Agent API",
-        "message": "WebSocket server is running. Frontend should connect to /ws/chat.",
-        "docs": "/docs"
-    }
-
-@app.get("/health")
-async def health_check():
-    return {"status": "ok", "models_loaded": _models_ready.is_set() if _models_ready else False}
 
 # ==============================================================================
 # FRONTEND INITIALIZATION
