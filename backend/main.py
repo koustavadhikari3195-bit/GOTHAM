@@ -305,6 +305,12 @@ async def web_session(ws: WebSocket):
 
         asyncio.create_task(_send_greeting_audio())
 
+        # Sentence accumulation buffer — prevents every 3.5s chunk from hitting the LLM
+        sentence_buffer = []
+        last_stt_time = 0
+        MIN_WORDS_FOR_LLM = 3  # Don't call LLM until we have at least 3 words
+        SENTENCE_FLUSH_TIMEOUT = 7  # Flush buffer after 7s of silence
+
         while True:
             # Check session timeout
             elapsed = asyncio.get_event_loop().time() - session_start_time
@@ -313,10 +319,22 @@ async def web_session(ws: WebSocket):
                 await ws.send_json({"type": "error", "message": "Session expired due to inactivity"})
                 break
 
+            user_text = None
+            
             try:
-                # Set timeout for receiving messages
-                message = await asyncio.wait_for(ws.receive(), timeout=SESSION_TIMEOUT_SECONDS)
+                # Short timeout to allow flushing sentence buffer if user stops talking
+                message = await asyncio.wait_for(ws.receive(), timeout=4.0)
             except asyncio.TimeoutError:
+                # If we have words in the buffer and user stopped talking, flush to LLM
+                if sentence_buffer:
+                    user_text = " ".join(sentence_buffer)
+                    sentence_buffer.clear()
+                    logger.info(f"Sentence flush timeout triggered. Sending: '{user_text}'")
+                    if ws.client_state == WebSocketState.CONNECTED:
+                        await ws.send_json({"type": "status", "status": "thinking"})
+                else:
+                    # Just an idle timeout, continue loop
+                    continue
                 logger.info("WebSocket receive timeout - session idle")
                 await ws.send_json({"type": "error", "message": "Session idle timeout"})
                 break
@@ -378,14 +396,32 @@ async def web_session(ws: WebSocket):
                             "hmm", "huh", "oh", "ah", "yeah", "yes", "no",
                             ".", "..", "...", "the", "i", "a",
                             "thanks", "thank you", "goodbye", "bye bye",
-                            "subscribe", "like and subscribe"
+                            "subscribe", "like and subscribe",
+                            "silence", "applause", "music", "laughter",
+                            "two hosheh", "so", "and", "but",
+                            "right", "like", "just", "well"
                         ]
                         trimmed_stt = stt_text.lower().strip().rstrip('.')
                         if stt_text and len(trimmed_stt) > 2 and trimmed_stt not in hallucinations:
-                            user_text = stt_text
-                            logger.info(f"STT result: '{user_text}'")
+                            # Add to sentence buffer instead of immediately calling LLM
+                            sentence_buffer.append(stt_text.strip())
+                            last_stt_time = asyncio.get_event_loop().time()
+                            full_sentence = " ".join(sentence_buffer)
+                            word_count = len(full_sentence.split())
+                            logger.info(f"STT buffer: '{full_sentence}' ({word_count} words)")
+                            
                             if ws.client_state == WebSocketState.CONNECTED:
-                                await ws.send_json({"type": "stt", "text": user_text})
+                                await ws.send_json({"type": "stt", "text": full_sentence})
+                            
+                            # Only send to LLM when we have enough words for a real sentence
+                            if word_count >= MIN_WORDS_FOR_LLM:
+                                user_text = full_sentence
+                                sentence_buffer.clear()
+                                logger.info(f"Sentence complete: '{user_text}'")
+                            else:
+                                # Wait for more words
+                                if ws.client_state == WebSocketState.CONNECTED:
+                                    await ws.send_json({"type": "status", "status": "listening"})
                         else:
                             # Resume listening if it was just noise
                             if ws.client_state == WebSocketState.CONNECTED:
@@ -456,7 +492,7 @@ async def web_session(ws: WebSocket):
                         if ws.client_state == WebSocketState.CONNECTED:
                             # Provide user-friendly messages based on error type
                             if any(s in error_str for s in ["429", "quota", "rate_limit", "resource_exhausted"]):
-                                user_msg = "I'm getting a lot of visitors right now! 🏋️ Please try again in a moment."
+                                user_msg = "I'm getting a lot of visitors right now. Please try again in a moment."
                             elif any(s in error_str for s in ["connection", "timeout", "network"]):
                                 user_msg = "I had a connection hiccup. Could you say that again?"
                             else:
