@@ -6,7 +6,7 @@ from .tools import GEMINI_TOOLS
 
 
 class GeminiAgent:
-    def __init__(self, model: str = "gemini-2.5-flash"):
+    def __init__(self, model: str = "gemini-1.5-flash"):
         self.client    = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         self.model     = model
         self.history   = []

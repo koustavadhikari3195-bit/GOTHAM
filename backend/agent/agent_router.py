@@ -1,8 +1,8 @@
 """
 3-Layer Agent Router
 ────────────────────
-Layer 1: Gemini Flash-Lite  → simple tasks, greetings, FAQs   (1,000 RPD free)
-Layer 2: Gemini 2.5 Flash   → complex tasks, tool calling      (250 RPD free)
+Layer 1: Gemini 1.5 Flash   → simple tasks, greetings, FAQs   (1,000 RPD free)
+Layer 2: Gemini 2.0 Flash   → complex tasks, tool calling      (250 RPD free)
 Layer 3: Groq Llama 3.3 70B → overflow fallback               (14,400 RPD free)
 
 Combined free capacity: ~15,650 requests/day
@@ -25,8 +25,8 @@ RATE_LIMIT_SIGNALS = [
 
 class AgentRouter:
     def __init__(self):
-        self.lite      = GeminiAgent(model="gemini-2.5-flash-lite")
-        self.flash     = GeminiAgent(model="gemini-2.5-flash")
+        self.lite      = GeminiAgent(model="gemini-1.5-flash")
+        self.flash     = GeminiAgent(model="gemini-2.0-flash")
         self.groq      = GroqAgent()
         self._mode     = "gemini"   # "gemini" | "groq"
         self.lead_data = {}

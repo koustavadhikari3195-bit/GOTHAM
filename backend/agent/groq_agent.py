@@ -13,7 +13,7 @@ class GroqAgent:
     """
     def __init__(self):
         self.client    = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self.model     = "llama-3.1-8b-instant"
+        self.model     = "llama-3.3-70b-versatile"
         self.history   = [{"role": "system", "content": SYSTEM_PROMPT}]
         self.lead_data = {}
 
