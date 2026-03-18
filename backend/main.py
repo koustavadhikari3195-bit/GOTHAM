@@ -267,10 +267,6 @@ async def web_session(ws: WebSocket):
                 await ws.close()
                 return
 
-        logger.info("Initializing AgentRouter...")
-        agent = AgentRouter()
-        logger.info("AgentRouter ready")
-
         # Fast Opening Greeting — send text IMMEDIATELY, then TTS in background
         greetings = [
             "Welcome to Gotham Fitness! I'm your AI concierge. What brings you in today?",
@@ -305,11 +301,9 @@ async def web_session(ws: WebSocket):
 
         asyncio.create_task(_send_greeting_audio())
 
-        # Sentence accumulation buffer — prevents every 3.5s chunk from hitting the LLM
-        sentence_buffer = []
-        last_stt_time = 0
-        MIN_WORDS_FOR_LLM = 3  # Don't call LLM until we have at least 3 words
-        SENTENCE_FLUSH_TIMEOUT = 7  # Flush buffer after 7s of silence
+        logger.info("Initializing AgentRouter...")
+        agent = AgentRouter()
+        logger.info("AgentRouter ready")
 
         while True:
             # Check session timeout
@@ -322,19 +316,10 @@ async def web_session(ws: WebSocket):
             user_text = None
             
             try:
-                # Short timeout to allow flushing sentence buffer if user stops talking
-                message = await asyncio.wait_for(ws.receive(), timeout=4.0)
+                # Wait for message from client (audio chunk or text chunk), with regular timeout
+                message = await asyncio.wait_for(ws.receive(), timeout=SESSION_TIMEOUT_SECONDS)
             except asyncio.TimeoutError:
-                # If we have words in the buffer and user stopped talking, flush to LLM
-                if sentence_buffer:
-                    user_text = " ".join(sentence_buffer)
-                    sentence_buffer.clear()
-                    logger.info(f"Sentence flush timeout triggered. Sending: '{user_text}'")
-                    if ws.client_state == WebSocketState.CONNECTED:
-                        await ws.send_json({"type": "status", "status": "thinking"})
-                else:
-                    # Just an idle timeout, continue loop
-                    continue
+                continue
             except WebSocketDisconnect:
                 logger.info("Client disconnected normally")
                 break
@@ -398,25 +383,11 @@ async def web_session(ws: WebSocket):
                         ]
                         trimmed_stt = stt_text.lower().strip().rstrip('.')
                         if stt_text and len(trimmed_stt) > 2 and trimmed_stt not in hallucinations:
-                            # Add to sentence buffer instead of immediately calling LLM
-                            sentence_buffer.append(stt_text.strip())
-                            last_stt_time = asyncio.get_event_loop().time()
-                            full_sentence = " ".join(sentence_buffer)
-                            word_count = len(full_sentence.split())
-                            logger.info(f"STT buffer: '{full_sentence}' ({word_count} words)")
+                            user_text = stt_text.strip()
+                            logger.info(f"STT complete sentence: '{user_text}'")
                             
                             if ws.client_state == WebSocketState.CONNECTED:
-                                await ws.send_json({"type": "stt", "text": full_sentence})
-                            
-                            # Only send to LLM when we have enough words for a real sentence
-                            if word_count >= MIN_WORDS_FOR_LLM:
-                                user_text = full_sentence
-                                sentence_buffer.clear()
-                                logger.info(f"Sentence complete: '{user_text}'")
-                            else:
-                                # Wait for more words
-                                if ws.client_state == WebSocketState.CONNECTED:
-                                    await ws.send_json({"type": "status", "status": "listening"})
+                                await ws.send_json({"type": "stt", "text": user_text})
                         else:
                             # Resume listening if it was just noise
                             if ws.client_state == WebSocketState.CONNECTED:
