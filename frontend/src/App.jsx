@@ -259,42 +259,43 @@ export default function App() {
         }
       })
       setStatus("listening")
+      return true
     } catch (err) {
       console.error("Microphone error:", err)
       setError("Microphone access denied. Please allow mic and try again.")
       setActive(false)
       activeRef.current = false
       setStatus("idle")
+      return false
     }
   }
 
   /**
    * Start voice session
-   * Connects to WebSocket and waits for greeting before starting mic
+   * Requests mic permission first to unlock autoplay, then connects to server
    */
   const startSession = async () => {
     setError(null)
     setTranscript([])
     setActive(true)
     activeRef.current = true
-    micStartedRef.current = false
     setStatus("connecting")
 
+    // 1. Request microphone first. This unlocks browser autoplay policy 
+    // and ensures we don't miss the greeting if the user takes time to click "Allow"
+    micStartedRef.current = true
+    const micSuccess = await startMic()
+    
+    // If mic failed (denied permission), stop session
+    if (!micSuccess) return
+
+    // 2. Connect to the WebSocket session
     try {
       connect({
         onMessage: handleMessage,
         onOpen: async () => {
           setStatus("connected")
-          console.log("[Session] Connected — waiting for greeting...")
-
-          // Set timeout for initial greeting
-          greetingTimeoutRef.current = setTimeout(() => {
-            console.log("Greeting timeout - starting mic anyway")
-            if (!micStartedRef.current) {
-              micStartedRef.current = true
-              startMic()
-            }
-          }, GREETING_TIMEOUT_MS)
+          console.log("[Session] Connected and ready.")
         },
         onError: (err) => {
           console.error("WebSocket error:", err)
@@ -302,16 +303,13 @@ export default function App() {
           setActive(false)
           activeRef.current = false
           setStatus("idle")
+          stop()
         },
         onClose: () => {
           setStatus("idle")
           setActive(false)
           activeRef.current = false
           stop()
-          if (greetingTimeoutRef.current) {
-            clearTimeout(greetingTimeoutRef.current)
-            greetingTimeoutRef.current = null
-          }
         },
       })
     } catch (err) {
@@ -320,6 +318,7 @@ export default function App() {
       setActive(false)
       activeRef.current = false
       setStatus("idle")
+      stop()
     }
   }
 
