@@ -335,9 +335,6 @@ async def web_session(ws: WebSocket):
                 else:
                     # Just an idle timeout, continue loop
                     continue
-                logger.info("WebSocket receive timeout - session idle")
-                await ws.send_json({"type": "error", "message": "Session idle timeout"})
-                break
             except WebSocketDisconnect:
                 logger.info("Client disconnected normally")
                 break
@@ -348,9 +345,7 @@ async def web_session(ws: WebSocket):
             if message["type"] == "websocket.disconnect":
                 logger.info("Client disconnected")
                 break
-                
-            user_text = None
-            
+
             # All messages should be JSON text
             inner_text = message.get("text")
             if not inner_text:

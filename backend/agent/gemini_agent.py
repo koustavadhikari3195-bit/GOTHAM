@@ -33,8 +33,14 @@ class GeminiAgent:
             "book_slot":       book,
             "save_lead_to_db": save,
         }
-        fn     = skill_map.get(name)
-        result = fn(**args) if fn else {"error": f"Unknown tool: {name}"}
+        fn = skill_map.get(name)
+        if not fn:
+            return {"error": f"Unknown tool: {name}"}
+        try:
+            result = fn(**args)
+        except Exception as e:
+            logger.error(f"Tool {name} raised exception: {e}", exc_info=True)
+            result = {"error": f"Tool {name} encountered an issue. Please try again."}
 
         if name == "save_lead_to_db":
             self.lead_data.update({k: v for k, v in args.items() if v})
@@ -65,7 +71,7 @@ class GeminiAgent:
 
         # Also clean up any other common markup artifacts
         cleaned = re.sub(r'</?function[^>]*>', '', cleaned)
-        cleaned = re.sub(r'\{"name"\s*:.*?\}', '', cleaned)  # stray JSON objects
+        cleaned = re.sub(r'\{"name"\s*:\s*"(check_calendar|book_slot|save_lead_to_db)"[^}]*\}', '', cleaned)
 
         # Clean up extra whitespace left behind
         cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
@@ -91,6 +97,14 @@ class GeminiAgent:
                 temperature=0.7,
             )
         )
+
+        if not resp.candidates:
+            fallback = "Sorry, I didn't catch that. Could you say that again?"
+            self.history.append(
+                types.Content(role="model",
+                              parts=[types.Part.from_text(text=fallback)])
+            )
+            return fallback
 
         candidate = resp.candidates[0]
         fcs = [p.function_call

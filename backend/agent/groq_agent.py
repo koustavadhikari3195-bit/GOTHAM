@@ -37,8 +37,14 @@ class GroqAgent:
             "book_slot":       book,
             "save_lead_to_db": save,
         }
-        fn     = skill_map.get(name)
-        result = fn(**args) if fn else {"error": f"Unknown tool: {name}"}
+        fn = skill_map.get(name)
+        if not fn:
+            return {"error": f"Unknown tool: {name}"}
+        try:
+            result = fn(**args)
+        except Exception as e:
+            logger.error(f"Tool {name} raised exception: {e}", exc_info=True)
+            result = {"error": f"Tool {name} encountered an issue. Please try again."}
 
         if name == "save_lead_to_db":
             self.lead_data.update({k: v for k, v in args.items() if v})
@@ -62,7 +68,7 @@ class GroqAgent:
 
         cleaned = FUNCTION_CALL_PATTERN.sub('', text)
         cleaned = re.sub(r'</?function[^>]*>', '', cleaned)
-        cleaned = re.sub(r'\{"name"\s*:.*?\}', '', cleaned)
+        cleaned = re.sub(r'\{"name"\s*:\s*"(check_calendar|book_slot|save_lead_to_db)"[^}]*\}', '', cleaned)
         cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
         cleaned = cleaned.strip()
 

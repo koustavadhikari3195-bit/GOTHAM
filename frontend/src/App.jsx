@@ -139,9 +139,15 @@ export default function App() {
 
     // STT response: user speech transcription
     if (msg.type === "stt" && typeof msg.text === "string") {
-      setTranscript(t => [...t, { role: "user", text: msg.text }])
+      // Replace last user entry if it was from STT (progressive updates expand the same utterance)
+      setTranscript(t => {
+        const last = t[t.length - 1]
+        if (last && last.role === "user" && last.fromSTT) {
+          return [...t.slice(0, -1), { role: "user", text: msg.text, fromSTT: true }]
+        }
+        return [...t, { role: "user", text: msg.text, fromSTT: true }]
+      })
       setInputValue(msg.text) // Auto-fill text input
-      setStatus("thinking")
     }
 
     // Error response from server
@@ -153,6 +159,7 @@ export default function App() {
         setStatus("idle")
       } else {
         setStatus("listening") // Resume listening after non-fatal errors
+        resume() // Ensure microphone resumes after error
       }
       // Auto-clear error after 5 seconds
       setTimeout(() => setError(null), 5000)
